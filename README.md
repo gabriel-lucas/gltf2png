@@ -4,7 +4,7 @@ Render 3D models in GLTF format to png images in the server (headless)
 
 ## Usage:
 
-xvfb-run -a ./3drender model.glb 800x600 output.png
+xvfb-run -a ./gltf2png model.glb 800x600 output.png
 
 ## Installation
 
