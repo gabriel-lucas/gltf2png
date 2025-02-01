@@ -1,6 +1,7 @@
 # gltf2png
 
-Render 3D models in GLTF format to png images in the server (headless)
+Render 3D models (gltf & glb) to png images in the server / headless.
+This program uses [Filament](https://google.github.io/filament/)
 
 ## Usage:
 
