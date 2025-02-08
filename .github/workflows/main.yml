@@ -40,7 +40,7 @@ jobs:
         for filepath in test/models/*.glb; do
           filename=$(basename $filepath) 
           echo "Modelo ${filename%.*}"
-          echo "Imagen test/images/$(basename "$file").png"
+          echo "Imagen test/images/${filename%.*}.png"
           xvfb-run -a ./gltf2png "$filepath" 800x600 "test/images/${filename%.*}.png"
         done
         
