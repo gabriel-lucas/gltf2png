@@ -254,21 +254,7 @@ int main(int argc, char** argv) {
             throw std::runtime_error("Failed to load model: " + config.modelPath);
         }
 
-        logStep("Loading resources");
-        ResourceConfiguration resConfig;
-        resConfig.engine = engine;
-        resConfig.normalizeSkinningWeights = true;
-        resConfig.recomputeBoundingBoxes = false;
-        
-        ResourceLoader resourceLoader(resConfig);
-        resourceLoader.loadResources(asset);
-        resourceLoader.asyncBeginLoad(asset);
-        
-        logStep("Waiting for resources to load");
-        while (resourceLoader.asyncGetLoadProgress() < 1.0f) {
-            std::cout << "Loading progress: " << resourceLoader.asyncGetLoadProgress() << std::endl;
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        }
+       
 	
         if (asset->getMaterialInstanceCount() == 0) {
             throw std::runtime_error("No materials loaded in asset");
