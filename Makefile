@@ -1,4 +1,4 @@
-CXX = clang++-19
+CXX = clang++-18
 CXXFLAGS = -g -O0 -std=gnu++17 -pthread \
            -I/usr/include/filament-1.9 \
            -I/usr/include/filament-1.9/backend \
