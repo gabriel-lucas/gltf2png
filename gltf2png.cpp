@@ -167,7 +167,7 @@ Entity setupCamera(Engine* engine, View* view, uint32_t width, uint32_t height, 
 }
 
 void saveImage(const std::string& outputFile, std::vector<uint8_t>& pixels, uint32_t width, uint32_t height) {
-    logStep("Saving image %s", outputFile.c_str());
+    logStep("Saving image %s", outputFileout);
 
     // Convert from linear to sRGB and set alpha to 255
     for (size_t i = 0; i < pixels.size(); i += 4) {
@@ -183,7 +183,7 @@ void saveImage(const std::string& outputFile, std::vector<uint8_t>& pixels, uint
         pixels[i + 3] = 255;
     }
 
-    stbi_write_png(outputFile.c_str(), width, height, 4, pixels.data(), width * 4);
+    stbi_write_png(outputFileout, width, height, 4, pixels.data(), width * 4);
 }
 
 int main(int argc, char** argv) {
@@ -260,11 +260,30 @@ int main(int argc, char** argv) {
 
         logStep("Creating Filament asset");
         FilamentAsset* asset = loader->createAssetFromBinary(buffer.data(), size);
-        if (!asset) {
+        if (!asset || !asset->getRoot()) {
             throw std::runtime_error("Failed to load model: " + config.modelPath);
         }
 
-       
+        logStep("Loading resources");
+        ResourceConfiguration resConfig;
+        resConfig.engine = engine;
+        resConfig.normalizeSkinningWeights = true;
+        resConfig.recomputeBoundingBoxes = false;
+
+        ResourceLoader resourceLoader(resConfig);
+        resourceLoader.asyncBeginLoad(asset);  // Remove loadResources() call
+
+        logStep("Waiting for resources to load");
+        while (resourceLoader.asyncGetLoadProgress() < 1.0f) {
+            std::cout << "Loading progress: " 
+                    << resourceLoader.asyncGetLoadProgress() * 100.0f << "%\n";
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+
+        // Add validation after loading
+        if (!asset->isReady()) {
+            throw std::runtime_error("Asset failed to load completely");
+
 	
         if (asset->getMaterialInstanceCount() == 0) {
             throw std::runtime_error("No materials loaded in asset");
