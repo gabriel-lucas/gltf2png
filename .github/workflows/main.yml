@@ -34,15 +34,16 @@ jobs:
       run: |
         export LIBGL_ALWAYS_SOFTWARE=1
         export GALLIUM_DRIVER=llvmpipe
-        # mkdir -p test
+        rm -R test/images
+        mkdir -p test/images
         # Add your test files to a 'models' directory
-        for file in test/models/*.glb; do
-          echo "Modelo $file"
+        for filepath in test/models/*.glb; do
+          filename=$(basename $filepath) 
+          echo "Modelo ${filename%.*}"
           echo "Imagen test/images/$(basename "$file").png"
-          xvfb-run -a ./gltf2png "$file" 800x600 "test/images/$(basename "$file").png"
+          xvfb-run -a ./gltf2png "$filepath" 800x600 "test/images/${filename%.*}.png"
         done
         
-        rm * test/images/*.png
         # Verify outputs
         if [ $(ls test/images/*.png | wc -l) -eq 0 ]; then
           echo "No PNGs generated!"
