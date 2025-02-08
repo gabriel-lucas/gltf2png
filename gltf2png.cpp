@@ -167,7 +167,7 @@ Entity setupCamera(Engine* engine, View* view, uint32_t width, uint32_t height, 
 }
 
 void saveImage(const std::string& outputFile, std::vector<uint8_t>& pixels, uint32_t width, uint32_t height) {
-    logStep("Saving image %s", outputFile);
+    logStep("Saving image %s", outputFile.c_str());
 
     // Convert from linear to sRGB and set alpha to 255
     for (size_t i = 0; i < pixels.size(); i += 4) {
