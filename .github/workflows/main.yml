@@ -28,6 +28,8 @@ jobs:
         for file in models/*.{gltf,glb}; do
           ./gltf2png "$file" "test/images$(basename "$file").png"
         done
+        
+        rm * test/images/*.png
         # Verify outputs
         if [ $(ls test/images/*.png | wc -l) -eq 0 ]; then
           echo "No PNGs generated!"
