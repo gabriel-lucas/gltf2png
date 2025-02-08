@@ -44,6 +44,7 @@ jobs:
           xvfb-run -a ./gltf2png "$filepath" 800x600 "test/images/${filename%.*}.png"
         done
 
+        pwd
         ls test/images/
         
         # Verify outputs
