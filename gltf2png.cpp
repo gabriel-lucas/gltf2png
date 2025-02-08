@@ -184,7 +184,6 @@ int main(int argc, char** argv) {
 
         logStep("Creating Filament engine");
         Engine* engine = Engine::create(Engine::Backend::OPENGL); 
-        engine->setDebugLevel(filament::Engine::DebugLevel::SILENT);
         
         logStep("Creating renderer components");
         Renderer* renderer = engine->createRenderer();
