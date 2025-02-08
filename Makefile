@@ -16,6 +16,7 @@ LDFLAGS = -L/usr/lib/x86_64-linux-gnu \
           -lfilament_utils \
           -lfilament_filabridge \
           -lvulkan \
+          -lmeshoptimizer \
           -lglfw \
           -lassimp \
           -ldraco \

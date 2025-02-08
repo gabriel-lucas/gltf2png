@@ -184,7 +184,8 @@ int main(int argc, char** argv) {
 
         logStep("Creating Filament engine");
         Engine* engine = Engine::create(Engine::Backend::OPENGL); 
-
+        engine->setDebugLevel(filament::Engine::DebugLevel::SILENT);
+        
         logStep("Creating renderer components");
         Renderer* renderer = engine->createRenderer();
         Scene* scene = engine->createScene();
@@ -299,7 +300,6 @@ int main(int argc, char** argv) {
 
         // Add additional synchronization
         logStep("Waiting for GPU completion");
-        renderer->endFrame();
         engine->flushAndWait();
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
@@ -359,7 +359,7 @@ int main(int argc, char** argv) {
         delete materials;
         
         engine->destroy(cameraEntity);
-	engine->destroy(renderTarget);
+	    engine->destroy(renderTarget);
         engine->destroy(colorTexture);
         engine->destroy(cameraEntity);
         engine->destroy(view);

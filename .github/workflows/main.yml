@@ -32,9 +32,13 @@ jobs:
 
     - name: Run tests
       run: |
+        export LIBGL_ALWAYS_SOFTWARE=1
+        export GALLIUM_DRIVER=llvmpipe
         # mkdir -p test
         # Add your test files to a 'models' directory
         for file in test/models/*.glb; do
+          echo "Modelo $file"
+          echo "Imagen test/images/$(basename "$file").png"
           xvfb-run -a ./gltf2png "$file" 800x600 "test/images/$(basename "$file").png"
         done
         
