@@ -1,0 +1,54 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libfilament1.9 libfilament-dev libassimp5 libastcenc3d libdraco7 libfilament-tools libimgui-dev libmeshoptimizer2d libminizip1 libspirv-cross-c-shared0 libstb-dev libstb0 libtinyexr1d robin-map-dev libstb-dev libglfw3-dev libassimp-dev libdraco-dev libegl-dev libegl1-mesa-dev libgles-dev libgles1 libglfw3 libglvnd-core-dev libglvnd-dev libminizip-dev libvulkan-dev libwayland-bin libwayland-dev libxrandr-dev libxrender-dev libspirv-cross-c-shared-dev vulkan-tools libgl1-mesa-dev xvfb
+    - name: Build project
+      run: make
+
+    - name: Run tests
+      run: |
+        # mkdir -p test
+        # Add your test files to a 'models' directory
+        for file in models/*.{gltf,glb}; do
+          ./gltf2png "$file" "test/images$(basename "$file").png"
+        done
+        # Verify outputs
+        if [ $(ls test/images/*.png | wc -l) -eq 0 ]; then
+          echo "No PNGs generated!"
+          exit 1
+        fi
+
+  deploy-website:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup website
+      run: |
+        # Add commands to build your website if needed
+        cp -R website/ public/
+        cp test/*.png public/images/
+
+    - name: Deploy to GitHub Pages
+      uses: peaceiris/gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./public
