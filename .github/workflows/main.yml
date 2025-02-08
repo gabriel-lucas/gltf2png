@@ -25,7 +25,7 @@ jobs:
       run: |
         # mkdir -p test
         # Add your test files to a 'models' directory
-        for file in models/*.{gltf,glb}; do
+        for file in test/models/*.glb; do
           xvfb-run -a ./gltf2png "$file" 800x600 "test/images/$(basename "$file").png"
         done
         
