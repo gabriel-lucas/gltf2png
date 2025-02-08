@@ -43,6 +43,8 @@ jobs:
           echo "Imagen test/images/${filename%.*}.png"
           xvfb-run -a ./gltf2png "$filepath" 800x600 "test/images/${filename%.*}.png"
         done
+
+        ls test/images/
         
         # Verify outputs
         if [ $(ls test/images/*.png | wc -l) -eq 0 ]; then

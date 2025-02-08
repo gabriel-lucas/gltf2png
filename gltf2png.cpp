@@ -85,8 +85,18 @@ bool parseArguments(int argc, char** argv, AppConfig& config) {
     return true;
 }
 
-void logStep(const char* message) {
+/** void logStep(const char* message) {
     std::cout << "STEP: " << message << std::endl;
+    std::cout.flush();
+}*/
+
+void logStep(const char* format, ...) {
+    char buffer[256];
+    va_list args;
+    va_start(args, format);
+    vsnprintf(buffer, sizeof(buffer), format, args);
+    va_end(args);
+    std::cout << "STEP: " << buffer << std::endl;
     std::cout.flush();
 }
 
@@ -157,7 +167,7 @@ Entity setupCamera(Engine* engine, View* view, uint32_t width, uint32_t height, 
 }
 
 void saveImage(const std::string& outputFile, std::vector<uint8_t>& pixels, uint32_t width, uint32_t height) {
-    logStep("Saving image");
+    logStep("Saving image %s", config.outputFile.c_str());
 
     // Convert from linear to sRGB and set alpha to 255
     for (size_t i = 0; i < pixels.size(); i += 4) {
@@ -346,7 +356,6 @@ int main(int argc, char** argv) {
         engine->destroy(cameraEntity);
 	    engine->destroy(renderTarget);
         engine->destroy(colorTexture);
-        engine->destroy(cameraEntity);
         engine->destroy(view);
         engine->destroy(scene);
         engine->destroy(renderer);
