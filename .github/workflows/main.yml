@@ -26,7 +26,7 @@ jobs:
         # mkdir -p test
         # Add your test files to a 'models' directory
         for file in models/*.{gltf,glb}; do
-          ./gltf2png "$file" "test/images$(basename "$file").png"
+          xvfb-run -a ./gltf2png "$file" 800x600 "test/images/$(basename "$file").png"
         done
         
         rm * test/images/*.png
