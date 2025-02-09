@@ -272,10 +272,11 @@ int main(int argc, char** argv) {
         resConfig.recomputeBoundingBoxes = false;
 
         ResourceLoader resourceLoader(resConfig);
-        resourceLoader.asyncBeginLoad(asset);
 
 
         bool asyncStarted = resourceLoader.asyncBeginLoad(asset);
+        logStep("AsyncBeginLoad returned: %s", asyncStarted ? "true" : "false");
+
         if (!asyncStarted) {
             throw std::runtime_error("Failed to start asynchronous resource loading.");
         }
