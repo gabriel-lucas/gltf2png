@@ -266,6 +266,15 @@ int main(int argc, char** argv) {
 
        
         logStep("Loading resources");
+        ResourceConfiguration resConfig;
+        resConfig.engine = engine;
+        resConfig.normalizeSkinningWeights = true;
+        resConfig.recomputeBoundingBoxes = false;
+
+        ResourceLoader resourceLoader(resConfig);
+        resourceLoader.asyncBeginLoad(asset);
+
+
         bool asyncStarted = resourceLoader.asyncBeginLoad(asset);
         if (!asyncStarted) {
             throw std::runtime_error("Failed to start asynchronous resource loading.");
