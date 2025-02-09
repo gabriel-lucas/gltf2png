@@ -368,7 +368,7 @@ int main(int argc, char** argv) {
             );
         }
 
-	    logStep("Applying post-processing");
+	    /**logStep("Applying post-processing");
         const float sharpenAmount = 0.8f;
         for (size_t i = 0; i < pixels.size(); i += 4) {
             // Simple sharpen kernel
@@ -385,7 +385,7 @@ int main(int argc, char** argv) {
                     pixels[i + c] = static_cast<uint8_t>(std::clamp(sharpened, 0, 255));
                 }
             }
-        }
+        }*/
 
         engine->flushAndWait();
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
