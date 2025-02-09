@@ -203,7 +203,7 @@ int main(int argc, char** argv) {
         //view->setAntiAliasing(View::AntiAliasing::FXAA);
         view->setAntiAliasing(View::AntiAliasing::NONE);
         view->setSampleCount(8);  // Enable 4x MSAA
-	view->setToneMapping(View::ToneMapping::ACES);  // Better contrast
+	    view->setToneMapping(View::ToneMapping::ACES);  // Better contrast
 
         renderer->setClearOptions({
             .clearColor = {0.101f, 0.101f, 0.101f, 1.0f}, // #222222 background
@@ -266,20 +266,24 @@ int main(int argc, char** argv) {
 
        
         logStep("Loading resources");
-        ResourceConfiguration resConfig;
-        resConfig.engine = engine;
-        resConfig.normalizeSkinningWeights = true;
-        resConfig.recomputeBoundingBoxes = false;
+        bool asyncStarted = resourceLoader.asyncBeginLoad(asset);
+        if (!asyncStarted) {
+            throw std::runtime_error("Failed to start asynchronous resource loading.");
+        }
 
-        ResourceLoader resourceLoader(resConfig);
-        resourceLoader.asyncBeginLoad(asset);
-
-        logStep("Waiting for resources to load");
+        auto startTime = std::chrono::steady_clock::now();
         while (resourceLoader.asyncGetLoadProgress() < 1.0f) {
+            // This call is essential—it processes pending tasks
             resourceLoader.asyncUpdateLoad();
-
-            std::cout << "Loading progress: " 
-                    << resourceLoader.asyncGetLoadProgress() * 100.0f << "%\n";
+            
+            float progress = resourceLoader.asyncGetLoadProgress();
+            std::cout << "Loading progress: " << progress * 100.0f << "%\n";
+            
+            // Optional: timeout if no progress is made to avoid infinite loop.
+            if (std::chrono::steady_clock::now() - startTime > std::chrono::seconds(10)) {
+                throw std::runtime_error("Timeout waiting for resource loading to complete.");
+            }
+            
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
 
@@ -344,7 +348,7 @@ int main(int argc, char** argv) {
             );
         }
 
-	logStep("Applying post-processing");
+	    logStep("Applying post-processing");
         const float sharpenAmount = 0.8f;
         for (size_t i = 0; i < pixels.size(); i += 4) {
             // Simple sharpen kernel
