@@ -53,4 +53,10 @@ jobs:
           exit 1
         fi
 
+    - name: Upload generated images
+      uses: actions/upload-artifact@v4
+      with:
+        name: rendered-images
+        path: test/images/
+        if-no-files-found: error
   
