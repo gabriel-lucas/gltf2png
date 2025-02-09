@@ -265,6 +265,26 @@ int main(int argc, char** argv) {
         }
 
        
+        logStep("Loading resources");
+        ResourceConfiguration resConfig;
+        resConfig.engine = engine;
+        resConfig.normalizeSkinningWeights = true;
+        resConfig.recomputeBoundingBoxes = false;
+
+        ResourceLoader resourceLoader(resConfig);
+        resourceLoader.asyncBeginLoad(asset);
+
+        logStep("Waiting for resources to load");
+        while (resourceLoader.asyncGetLoadProgress() < 1.0f) {
+            std::cout << "Loading progress: " 
+                    << resourceLoader.asyncGetLoadProgress() * 100.0f << "%\n";
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+
+        if (asset->getResourceUriCount() > 0 && !resourceLoader.hasCompleted()) {
+            throw std::runtime_error("Asset resources failed to load");
+        }
+
 	
         if (asset->getMaterialInstanceCount() == 0) {
             throw std::runtime_error("No materials loaded in asset");

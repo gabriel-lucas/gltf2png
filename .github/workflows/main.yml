@@ -34,7 +34,7 @@ jobs:
       run: |
         export LIBGL_ALWAYS_SOFTWARE=1
         export GALLIUM_DRIVER=llvmpipe
-        rm -R test/images
+        
         mkdir -p test/images
         # Add your test files to a 'models' directory
         for filepath in test/models/*.glb; do
