@@ -306,7 +306,11 @@ int main(int argc, char** argv) {
         if (asset->getResourceUriCount() > 0 && resourceLoader.asyncGetLoadProgress() < 1.0f) {
             throw std::runtime_error("Asset resources failed to load");
         }
-        
+
+        // Cancel any remaining asynchronous tasks.
+        resourceLoader.asyncCancelLoad();
+        // Optionally flush one more time.
+        engine->flushAndWait();
 
 	
         if (asset->getMaterialInstanceCount() == 0) {
@@ -390,7 +394,11 @@ int main(int argc, char** argv) {
 
         saveImage(config.outputFile, pixels, config.width, config.height);
 
+
+        
+
         logStep("Cleaning up resources");
+        view->setScene(nullptr);
         loader->destroyAsset(asset);
         AssetLoader::destroy(&loader);
         materials->destroyMaterials();
