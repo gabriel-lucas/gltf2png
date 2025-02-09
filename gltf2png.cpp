@@ -100,10 +100,12 @@ void logStep(const char* format, ...) {
     std::cout.flush();
 }
 
-void setupLighting(Engine* engine, Scene* scene) {
+std::vector<Entity> setupLighting(Engine* engine, Scene* scene) {
+    std::vector<Entity> lights;
     EntityManager& em = EntityManager::get();
-    Entity sun = em.create();
 
+    // Create sun light
+    Entity sun = em.create();
     LightManager::ShadowOptions shadowOptions {
         .mapSize = 1024,
         .shadowCascades = 4,
@@ -117,15 +119,19 @@ void setupLighting(Engine* engine, Scene* scene) {
         .direction(normalize(float3{0.6f, -1.0f, -0.4f}))
         .build(*engine, sun);
     scene->addEntity(sun);
+    lights.push_back(sun);
 
-    // Add fill light
+    // Create fill light
     Entity fillLight = em.create();
     LightManager::Builder(LightManager::Type::DIRECTIONAL)
-        .color(Color::toLinear<ACCURATE>({0.8f, 0.8f, 1.0f})) // Cool fill
+        .color(Color::toLinear<ACCURATE>({0.8f, 0.8f, 1.0f}))
         .intensity(50000.0f)
         .direction(normalize(float3{-0.5f, -0.5f, -0.5f}))
         .build(*engine, fillLight);
     scene->addEntity(fillLight);
+    lights.push_back(fillLight);
+
+    return lights;
 }
 
 Entity setupCamera(Engine* engine, View* view, uint32_t width, uint32_t height, const filament::Aabb& bbox, float thetaDegrees = 45.0f, float phiDegrees = 20.0f) {
@@ -241,7 +247,7 @@ int main(int argc, char** argv) {
         view->setRenderTarget(renderTarget);
 
         logStep("Setting up lighting");
-        setupLighting(engine, scene);
+        std::vector<Entity> lightEntities = setupLighting(engine, scene);
 
         logStep("Loading 3D model");
         MaterialProvider* materials = createUbershaderLoader(engine);
@@ -390,6 +396,12 @@ int main(int argc, char** argv) {
         materials->destroyMaterials();
         delete materials;
         
+        // Destroy the light entities
+        EntityManager& em = EntityManager::get();
+        for (Entity light : lightEntities) {
+            em.destroy(light);
+        }
+
         engine->destroy(cameraEntity);
 	    engine->destroy(renderTarget);
         engine->destroy(colorTexture);
