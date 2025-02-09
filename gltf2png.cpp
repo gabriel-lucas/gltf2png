@@ -397,9 +397,8 @@ int main(int argc, char** argv) {
         delete materials;
         
         // Destroy the light entities
-        EntityManager& em = EntityManager::get();
         for (Entity light : lightEntities) {
-            em.destroy(light);
+            engine->destroy(light);
         }
 
         engine->destroy(cameraEntity);
