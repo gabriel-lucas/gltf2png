@@ -183,7 +183,7 @@ void saveImage(const std::string& outputFile, std::vector<uint8_t>& pixels, uint
         pixels[i + 3] = 255;
     }
 
-    stbi_write_png(outputFile, width, height, 4, pixels.data(), width * 4);
+    stbi_write_png(outputFile.c_str(), width, height, 4, pixels.data(), width * 4);
 }
 
 int main(int argc, char** argv) {
