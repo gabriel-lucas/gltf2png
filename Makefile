@@ -13,6 +13,7 @@ CXXFLAGS = \
 	   -Iinclude/ \
 	    -I/usr/include/stb/ \
 	   -std=c++17 \
+	   -g -O0 \ 
 	   -stdlib=libc++ -c -fno-builtin
 
 LDFLAGS = -Llib/x86_64/ -ldl
