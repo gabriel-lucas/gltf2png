@@ -15,14 +15,19 @@
 #include <gltfio/AssetLoader.h>
 #include <gltfio/FilamentAsset.h>
 #include <gltfio/ResourceLoader.h>
+#include <gltfio/TextureProvider.h>
 #include <gltfio/MaterialProvider.h>
-
+#include <gltfio/Animator.h>
+#include <gltfio/materials/uberarchive.h>
 #include <utils/EntityManager.h>
+#include <gltfio/FilamentInstance.h>
+
 #include <math/norm.h>
 #include <math/mat4.h>
 #include <math/vec3.h>
 #include <math/vec4.h>
 
+#define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb_image_write.h>
 #include <vector>
 #include <fstream>
@@ -32,6 +37,9 @@
 #include <thread>
 #include <stdexcept>
 #include <cmath>
+#include <cstdarg>
+#include <future>
+#include <chrono>
 
 using namespace filament::backend;
 using namespace filament;
@@ -50,28 +58,55 @@ std::ostream& operator<<(std::ostream& os, const filament::Aabb& box) {
     return os;
 }
 
-struct AppConfig {
-    std::string modelPath;
-    std::string outputFile = "output.png";
-    uint32_t width = 800;
-    uint32_t height = 600;
+struct AppContext {
+    Engine* engine = nullptr;
+    Renderer* renderer = nullptr;
+    Scene* scene = nullptr;
+    View* view = nullptr;
+    SwapChain* swapChain = nullptr;
+    RenderTarget* renderTarget = nullptr;
+    Texture* colorTexture = nullptr;
+    FilamentAsset* asset = nullptr;
+    ResourceLoader* resourceLoader = nullptr;
+    MaterialProvider* materials = nullptr;
+    AssetLoader* assetLoader = nullptr;
+    std::vector<Entity> lightEntities;
+    std::vector<uint8_t> pixels;
+    Entity cameraEntity;
+    TextureProvider* stbDecoder = nullptr;
+    TextureProvider* ktxDecoder = nullptr;
+    struct Config {
+        std::string modelPath;
+        std::string outputFile = "output.png";
+        uint32_t width = 800;
+        uint32_t height = 600;
+        float cameraDistanceMultiplier = 2.0f;  // Adjusted for better framing
+        float fovDegrees = 55.0f;               // Slightly wider FOV
+    } config;
 };
 
-bool parseArguments(int argc, char** argv, AppConfig& config) {
+// Forward declarations
+//void initializeFilament(AppContext& ctx);
+//void loadModel(AppContext& ctx);
+//void setupCamera(AppContext& ctx);
+//void renderFrame(AppContext& ctx);
+//void cleanupFilament(AppContext& ctx);
+
+bool parseArguments(int argc, char** argv, AppContext& ctx) {
     if (argc < 2) {
         std::cerr << "Usage: " << argv[0] << " <model.gltf> [widthxheight] [output.png]\n";
         return false;
     }
 
-    config.modelPath = argv[1];
+    ctx.config.modelPath = argv[1];
 
     if (argc >= 3) {
         std::string resolution = argv[2];
         size_t xpos = resolution.find('x');
         if (xpos != std::string::npos) {
             try {
-                config.width = std::stoi(resolution.substr(0, xpos));
-                config.height = std::stoi(resolution.substr(xpos+1));
+                ctx.config.width = std::stoi(resolution.substr(0, xpos));
+                ctx.config.height = std::stoi(resolution.substr(xpos+1));
             } catch (...) {
                 std::cerr << "Invalid resolution format. Using default 800x600\n";
             }
@@ -79,16 +114,11 @@ bool parseArguments(int argc, char** argv, AppConfig& config) {
     }
 
     if (argc >= 4) {
-        config.outputFile = argv[3];
+        ctx.config.outputFile = argv[3];
     }
 
     return true;
 }
-
-/** void logStep(const char* message) {
-    std::cout << "STEP: " << message << std::endl;
-    std::cout.flush();
-}*/
 
 void logStep(const char* format, ...) {
     char buffer[256];
@@ -134,7 +164,42 @@ std::vector<Entity> setupLighting(Engine* engine, Scene* scene) {
     return lights;
 }
 
-Entity setupCamera(Engine* engine, View* view, uint32_t width, uint32_t height, const filament::Aabb& bbox, float thetaDegrees = 45.0f, float phiDegrees = 20.0f) {
+
+//setupCamera( 30.0f, 60.0f);
+
+void setupCamera(AppContext& ctx) {
+    logStep("Positioning camera");
+    //filament::Aabb bbox = ctx.asset->getBoundingBox();
+    //std::cout << "Model Bounding Box: " << bbox << std::endl;
+    const auto& bbox = ctx.asset->getBoundingBox();
+    const float3 center = bbox.center();
+    const float3 extent = bbox.extent();
+
+    // Calculate radius based on maximum extent dimension
+    const float maxExtent = std::max({extent.x, extent.y, extent.z});
+    const float radius = maxExtent * ctx.config.cameraDistanceMultiplier;
+
+    EntityManager& em = EntityManager::get();
+    ctx.cameraEntity = em.create();
+
+    Camera* camera = ctx.engine->createCamera(ctx.cameraEntity);
+    camera->setProjection(ctx.config.fovDegrees,
+                         static_cast<float>(ctx.config.width)/ctx.config.height,
+                         0.1f,  // Improved near plane
+                         radius * 10);  // Dynamic far plane
+
+    // Position camera looking at center with upward Y-axis
+    auto& tm = ctx.engine->getTransformManager();
+    const float3 eye = center + float3{0, 0, radius};
+    tm.setTransform(tm.getInstance(ctx.cameraEntity),
+                   mat4f::lookAt(eye, center, float3{0, 1, 0}));
+
+    ctx.view->setCamera(camera);
+}
+
+
+/**
+    Entity setupCamera(Engine* engine, View* view, uint32_t width, uint32_t height, const filament::Aabb& bbox, float thetaDegrees = 45.0f, float phiDegrees = 20.0f) {
     EntityManager& em = EntityManager::get();
     Entity cameraEntity = em.create();
     Camera* camera = engine->createCamera(cameraEntity);
@@ -170,7 +235,9 @@ Entity setupCamera(Engine* engine, View* view, uint32_t width, uint32_t height, 
            mat4f::lookAt(eye, center, float3{0, 1, 0}));
     
     return cameraEntity;
-}
+} */
+
+
 
 void saveImage(const std::string& outputFile, std::vector<uint8_t>& pixels, uint32_t width, uint32_t height) {
     logStep("Saving image %s", outputFile.c_str());
@@ -192,241 +259,320 @@ void saveImage(const std::string& outputFile, std::vector<uint8_t>& pixels, uint
     stbi_write_png(outputFile.c_str(), width, height, 4, pixels.data(), width * 4);
 }
 
-int main(int argc, char** argv) {
-    try {
-        logStep("Program started");
-        AppConfig config;
-        if (!parseArguments(argc, argv, config)) return EXIT_FAILURE;
+void initializeFilament(AppContext& ctx) {
+    
 
-        logStep("Creating Filament engine");
-        Engine* engine = Engine::create(Engine::Backend::OPENGL); 
+    ctx.engine = Engine::create(Engine::Backend::OPENGL);
+    
+    // Configure quality settings
+
+
+    logStep("Creating renderer components");
+    ctx.renderer = ctx.engine->createRenderer();
+    ctx.renderer->setClearOptions({
+        .clearColor = {0.101f, 0.101f, 0.101f, 1.0f},
+        .clear = true
+    });
+
+    logStep("Creating View");
+    ctx.view = ctx.engine->createView();
+    ctx.view->setAntiAliasing(View::AntiAliasing::FXAA);  // Enable AA
+    //ctx.view->setAntiAliasing(View::AntiAliasing::NONE);
+    //ctx.view->setSampleCount(4);  // MSAA samples
+    
+    // Configure AO and shadows
+    ctx.view->setAmbientOcclusionOptions({
+        .radius = 0.5f, .power = 2.0f, .bias = 0.01f, .resolution = 0.5f
+    });
+    ctx.view->setShadowType(View::ShadowType::PCF);
+    ctx.view->setViewport({0, 0, ctx.config.width, ctx.config.height});
+    ctx.scene = ctx.engine->createScene();
+
+    logStep("Creating swap chain");
+    ctx.swapChain = ctx.engine->createSwapChain(ctx.config.width, ctx.config.height);
+
+    logStep("Creating render target");
+    ctx.colorTexture = Texture::Builder()
+        .width(ctx.config.width)
+        .height(ctx.config.height)
+        .levels(1)
+        .format(Texture::InternalFormat::RGBA8)
+        .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE | Texture::Usage::BLIT_SRC)
+        .build(*ctx.engine);
+
+    ctx.renderTarget = RenderTarget::Builder()
+        .texture(RenderTarget::AttachmentPoint::COLOR0, ctx.colorTexture)
+        .build(*ctx.engine);
+
+    ctx.view->setViewport({0, 0, ctx.config.width, ctx.config.height});
+    ctx.view->setRenderTarget(ctx.renderTarget);
+    
+    logStep("Setting up lighting");
+    ctx.lightEntities = setupLighting(ctx.engine, ctx.scene);
+}
+
+void loadModel(AppContext& ctx){
+    logStep("Loading 3D model");
+    ctx.materials = createUbershaderProvider(ctx.engine, UBERARCHIVE_DEFAULT_DATA, UBERARCHIVE_DEFAULT_SIZE);
+    ctx.assetLoader = AssetLoader::create({ctx.engine, ctx.materials, nullptr});
+    
+    std::ifstream file(ctx.config.modelPath, std::ios::ate | std::ios::binary);
+    if (!file) {
+        throw std::runtime_error("Could not open model file: " + ctx.config.modelPath);
+    }
+    size_t size = file.tellg();
+    file.seekg(0);
+    std::vector<uint8_t> buffer(size);
+    file.read((char*)buffer.data(), size);
+    file.close();
+
+    logStep("Creating Filament asset");
+    //FilamentAsset* asset = loader->createAssetFromBinary(buffer.data(), size);
+    ctx.asset = ctx.assetLoader->createAsset(buffer.data(), size);
+    if (!ctx.asset || !ctx.asset->getRoot()) {
+        throw std::runtime_error("Failed to load model: " + ctx.config.modelPath);
+    }
+
+    logStep("Loading resources");
+    ResourceConfiguration resConfig;
+    resConfig.engine = ctx.engine;
+    resConfig.normalizeSkinningWeights = true;
+    resConfig.gltfPath = ctx.config.modelPath.c_str();
+
+    logStep("Path Model: %s",ctx.config.modelPath.c_str());
+    ctx.resourceLoader = new ResourceLoader(resConfig);
+    ctx.stbDecoder = createStbProvider(ctx.engine);
+    //ctx.ktxDecoder = createKtx2Provider(engine);
+    ctx.resourceLoader->addTextureProvider("image/png",  ctx.stbDecoder);
+    ctx.resourceLoader->addTextureProvider("image/jpeg", ctx.stbDecoder);
+    //resourceLoader->addTextureProvider("image/ktx2", ktxDecoder);
+    
+    bool asyncStarted = ctx.resourceLoader->asyncBeginLoad(ctx.asset);
+    logStep("AsyncBeginLoad returned: %s", asyncStarted ? "true" : "false");
+    if (!asyncStarted) {
+        throw std::runtime_error("Failed to start asynchronous resource loading.");
+    }
+
+    logStep("Waiting for resources to load");
+    while (ctx.resourceLoader->asyncGetLoadProgress() < 1.0f) {
+        // This call is essential—it processes pending tasks
+        ctx.resourceLoader->asyncUpdateLoad();
         
-        logStep("Creating renderer components");
-        Renderer* renderer = engine->createRenderer();
-        Scene* scene = engine->createScene();
-        View* view = engine->createView();
-	
-        //view->setAntiAliasing(View::AntiAliasing::FXAA);
-        view->setAntiAliasing(View::AntiAliasing::NONE);
-        view->setSampleCount(8);  // Enable 4x MSAA
-	    view->setToneMapping(View::ToneMapping::ACES);  // Better contrast
-
-        renderer->setClearOptions({
-            .clearColor = {0.101f, 0.101f, 0.101f, 1.0f}, // #222222 background
-            .clear = true
-        });
-
-        // Add ambient occlusion (after creating renderer)
-        view->setAmbientOcclusionOptions({
-            .radius = 0.5f,
-            .power = 2.0f,
-            .bias = 0.01f,
-            .resolution = 0.25f
-        });
-
-        // Enable better shadows
-        view->setShadowType(View::ShadowType::PCF);
-	
-        logStep("Creating swap chain");
-        SwapChain* swapChain = engine->createSwapChain(config.width, config.height, 0);
-
-        logStep("Creating render target");
-        Texture* colorTexture = Texture::Builder()
-            .width(config.width)
-            .height(config.height)
-            .levels(1)
-            .format(Texture::InternalFormat::RGBA8)
-            .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE)
-            .build(*engine);
-
-        RenderTarget* renderTarget = RenderTarget::Builder()
-            .texture(RenderTarget::AttachmentPoint::COLOR0, colorTexture)
-            .build(*engine);
-
-        view->setViewport({0, 0, config.width, config.height});
-        view->setRenderTarget(renderTarget);
-
-        logStep("Setting up lighting");
-        std::vector<Entity> lightEntities = setupLighting(engine, scene);
-
-        logStep("Loading 3D model");
-        MaterialProvider* materials = createUbershaderLoader(engine);
-        AssetLoader* loader = AssetLoader::create({engine, materials, nullptr});
-        
-        std::ifstream file(config.modelPath, std::ios::ate | std::ios::binary);
-        if (!file) {
-            throw std::runtime_error("Could not open model file: " + config.modelPath);
-        }
-
-        size_t size = file.tellg();
-        file.seekg(0);
-        std::vector<uint8_t> buffer(size);
-        file.read((char*)buffer.data(), size);
-        file.close();
-
-        logStep("Creating Filament asset");
-        FilamentAsset* asset = loader->createAssetFromBinary(buffer.data(), size);
-        if (!asset || !asset->getRoot()) {
-            throw std::runtime_error("Failed to load model: " + config.modelPath);
-        }
-
-       
-        logStep("Loading resources");
-        ResourceConfiguration resConfig;
-        resConfig.engine = engine;
-        resConfig.normalizeSkinningWeights = true;
-        resConfig.recomputeBoundingBoxes = false;
-
-        ResourceLoader resourceLoader(resConfig);
-
-
-        bool asyncStarted = resourceLoader.asyncBeginLoad(asset);
-        logStep("AsyncBeginLoad returned: %s", asyncStarted ? "true" : "false");
-
-        if (!asyncStarted) {
-            throw std::runtime_error("Failed to start asynchronous resource loading.");
-        }
-
-        auto startTime = std::chrono::steady_clock::now();
-        while (resourceLoader.asyncGetLoadProgress() < 1.0f) {
-            // This call is essential—it processes pending tasks
-            resourceLoader.asyncUpdateLoad();
-            
-            float progress = resourceLoader.asyncGetLoadProgress();
-            std::cout << "Loading progress: " << progress * 100.0f << "%\n";
-            
-            // Optional: timeout if no progress is made to avoid infinite loop.
-            if (std::chrono::steady_clock::now() - startTime > std::chrono::seconds(10)) {
-                throw std::runtime_error("Timeout waiting for resource loading to complete.");
+	    float progress = ctx.resourceLoader->asyncGetLoadProgress();
+        std::cout << "Loading progress: " << progress << std::endl;
+        if (progress <= 0.0f) {  // Add timeout for stalled loading
+            static int attempts = 0;
+            if (++attempts > 100) {  // 10 seconds timeout
+                throw std::runtime_error("Resource loading timeout");
             }
-            
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
 
-        if (asset->getResourceUriCount() > 0 && resourceLoader.asyncGetLoadProgress() < 1.0f) {
-            throw std::runtime_error("Asset resources failed to load");
-        }
+    
+	// Cancel any remaining asynchronous tasks.
+    ctx.resourceLoader->asyncCancelLoad();
+    
+    // Optionally flush one more time.
+    ctx.engine->flushAndWait();
 
-        // Cancel any remaining asynchronous tasks.
-        resourceLoader.asyncCancelLoad();
-        // Optionally flush one more time.
-        engine->flushAndWait();
+    std::cout << "Materials loaded via UbershaderProvider\n";
+    logStep("Adding entities to scene");
+    logStep("Number of entities: %zu", ctx.asset->getEntityCount());
+    ctx.scene->addEntities(ctx.asset->getEntities(), ctx.asset->getEntityCount());
+}
 
-	
-        if (asset->getMaterialInstanceCount() == 0) {
-            throw std::runtime_error("No materials loaded in asset");
-        }
-        std::cout << "Loaded " << asset->getMaterialInstanceCount() << " materials\n";
+void renderFrame(AppContext& ctx) {
+    logStep("Rendering scene");
+    ctx.view->setScene(ctx.scene);
+    
+    // Render the main frame.
+    logStep("Begin frame");
+    if (!ctx.renderer->beginFrame(ctx.swapChain)) {
+        throw std::runtime_error("Failed to begin frame");
+    }
+    
+    logStep("Rendering view");
+    ctx.renderer->render(ctx.view);
+    
+    logStep("Ending frame");
+    ctx.renderer->endFrame();
 
-        logStep("Adding entities to scene");
-        scene->addEntities(asset->getEntities(), asset->getEntityCount());
+    // Flush the engine to submit all pending GPU commands.
+    logStep("Flushing engine");
+    ctx.engine->flushAndWait();
 
-        logStep("Positioning camera");
-        filament::Aabb bbox = asset->getBoundingBox();
-        std::cout << "Model Bounding Box: " << bbox << std::endl;
-        Entity cameraEntity = setupCamera(engine, view, config.width, config.height, bbox, 30.0f, 60.0f);
+    // Prepare the pixel buffer.
+    logStep("Capturing pixels");
+    ctx.pixels.resize(ctx.config.width * ctx.config.height * 4);
 
+    // Set up a promise and future for the asynchronous readPixels callback.
+    std::promise<void> promise;
+    auto future = promise.get_future();
+
+    // Define a lambda callback that logs when it's invoked and fulfills the promise.
+    auto readCallback = [](void* /*buffer*/, size_t /*size*/, void* user) {
+        std::cout << "readPixels callback invoked" << std::endl;
+        static_cast<std::promise<void>*>(user)->set_value();
+    };
+
+    // Create the PixelBufferDescriptor.
+    Texture::PixelBufferDescriptor descriptor(
+        ctx.pixels.data(),
+        ctx.pixels.size(),
+        Texture::Format::RGBA,
+        Texture::Type::UBYTE,
+        readCallback,
+        &promise
+    );
+
+    logStep("Reading pixels from render target");
+    ctx.renderer->readPixels(
+        ctx.renderTarget,
+        0, 0,
+        ctx.config.width, ctx.config.height,
+        std::move(descriptor)
+    );
+
+    // Submit a dummy frame using the same swapChain to force processing of pending commands.
+    logStep("Submitting dummy frame to process readPixels callback");
+    if (ctx.renderer->beginFrame(ctx.swapChain)) {
+        ctx.renderer->endFrame();
+    } else {
+        logStep("Dummy frame beginFrame() failed");
+    }
+
+    logStep("Waiting for readPixels callback to complete");
+    future.wait();  // Blocks until the callback calls promise.set_value().
+    logStep("readPixels callback completed");
+}
+
+
+void renderFrame2(AppContext& ctx){
+    
         logStep("Rendering scene");
-        view->setScene(scene);
+        ctx.view->setScene(ctx.scene);
         
         logStep("Begin frame");
-        if (!renderer->beginFrame(swapChain)) {
+        if (!ctx.renderer->beginFrame(ctx.swapChain)) {
             throw std::runtime_error("Failed to begin frame");
         }
 
         logStep("Rendering view");
-        renderer->render(view);
+        ctx.renderer->render(ctx.view);
 
         logStep("Ending frame");
-        renderer->endFrame();
+        ctx.renderer->endFrame();
 
         // Add additional synchronization
         logStep("Waiting for GPU completion");
-        engine->flushAndWait();
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        ctx.engine->flushAndWait();
+        //std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
         logStep("Capturing pixels");
-        std::vector<uint8_t> pixels(config.width * config.height * 4);
-        bool readSuccess = false;
-	
-        // Create descriptor first to ensure scope
+        ctx.pixels.resize(ctx.config.width * ctx.config.height * 4);
+
+        std::promise<void> promise;
+        auto future = promise.get_future();
+        Texture::PixelBufferDescriptor descriptor(
+            ctx.pixels.data(),
+            ctx.pixels.size(),
+            Texture::Format::RGBA,
+            Texture::Type::UBYTE,
+            [](void* buffer, size_t size, void* user) {
+                static_cast<std::promise<void>*>(user)->set_value();
+            },
+            &promise
+        );
+
+
+        logStep("Reading pixels from render target");
+        ctx.renderer->readPixels(
+            ctx.renderTarget,
+            0, 0,
+            ctx.config.width, ctx.config.height,
+            std::move(descriptor)
+        );
+
+        // Submit a dummy frame to force the GPU to process pending commands and trigger the readPixels callback.
+        logStep("Submitting dummy frame to process readPixels callback");
+        ctx.renderer->renderStandaloneView(ctx.view);
+        
+        future.wait();  // Blocks until pixels are ready
+
+
+        /** Create descriptor first to ensure scope
         {
             Texture::PixelBufferDescriptor descriptor(
-                pixels.data(),
-                pixels.size(),
+                ctx.pixels.data(),
+                ctx.pixels.size(),
                 Texture::Format::RGBA,
                 Texture::Type::UBYTE,
                 1  // Alignment
             );
         
-            logStep("Reading pixels from render target");
-            renderer->readPixels(
-                renderTarget,
-                0, 0,
-                config.width, config.height,
-                std::move(descriptor)
-            );
-        }
-
-	    /**logStep("Applying post-processing");
-        const float sharpenAmount = 0.8f;
-        for (size_t i = 0; i < pixels.size(); i += 4) {
-            // Simple sharpen kernel
-            if (i > config.width * 4 + 4) {  // Avoid edges
-                for (int c = 0; c < 3; c++) {
-                    int current = pixels[i + c];
-                    int left = pixels[i - 4 + c];
-                    int right = pixels[i + 4 + c];
-                    int up = pixels[i - config.width * 4 + c];
-                    int down = pixels[i + config.width * 4 + c];
-                    
-                    int sharpened = current * (1 + 4 * sharpenAmount) 
-                                  - (left + right + up + down) * sharpenAmount;
-                    pixels[i + c] = static_cast<uint8_t>(std::clamp(sharpened, 0, 255));
-                }
-            }
-        }*/
-
-        engine->flushAndWait();
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-	
-
-        saveImage(config.outputFile, pixels, config.width, config.height);
-
-
         
+           
+            
+        } */
 
-        logStep("Cleaning up resources");
-        view->setScene(nullptr);
-        loader->destroyAsset(asset);
-        AssetLoader::destroy(&loader);
-        materials->destroyMaterials();
-        delete materials;
+        //ctx.engine->flushAndWait();
+        //std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+
+}
+
+void cleanupFilament(AppContext& ctx){
+    logStep("Cleaning up resources");
+    ctx.view->setScene(nullptr);
         
-        // Destroy the light entities
-        for (Entity light : lightEntities) {
-            engine->destroy(light);
-        }
+    // Delete ResourceLoader
+    delete ctx.resourceLoader;
+	delete ctx.stbDecoder;	
+    //delete ktxDecoder;
+ 	
+	ctx.assetLoader->destroyAsset(ctx.asset);
+    AssetLoader::destroy(&ctx.assetLoader);
+    if (ctx.materials) {
+        ctx.materials->destroyMaterials();
+        //gltfio::MaterialProvider::destroy(ctx.materials);
+    }
 
-        engine->destroy(cameraEntity);
-	    engine->destroy(renderTarget);
-        engine->destroy(colorTexture);
-        engine->destroy(view);
-        engine->destroy(scene);
-        engine->destroy(renderer);
-        engine->destroy(swapChain);
+    // Destroy the light entities
+    for (Entity light : ctx.lightEntities) {
+        ctx.engine->destroy(light);
+    }
+
+    //engine->destroy(colorGrading);
+    ctx.engine->destroy(ctx.cameraEntity);
+	ctx.engine->destroy(ctx.renderTarget);
+    ctx.engine->destroy(ctx.colorTexture);
+    ctx.engine->destroy(ctx.view);
+    ctx.engine->destroy(ctx.scene);
+    ctx.engine->destroy(ctx.renderer);
+    
+    
+    logStep("Destroying engine");
+    Engine::destroy(&ctx.engine);
+}
+
+int main(int argc, char** argv) {
+    AppContext ctx;
+    try {
+        if (!parseArguments(argc, argv, ctx)) return EXIT_FAILURE;
         
-        logStep("Destroying engine");
-        Engine::destroy(&engine);
-
-        logStep("Program completed successfully");
+    	logStep("Creating Filament engine");
+        initializeFilament(ctx);
+        loadModel(ctx);
+        setupCamera(ctx);
+        renderFrame(ctx);
+        saveImage(ctx.config.outputFile, ctx.pixels, ctx.config.width, ctx.config.height);
+        cleanupFilament(ctx);
+         logStep("Program completed successfully");
         return EXIT_SUCCESS;
     } catch (const std::exception& e) {
-        std::cerr << "CRITICAL ERROR: " << e.what() << std::endl;
-        return EXIT_FAILURE;
-    } catch (...) {
-        std::cerr << "UNKNOWN ERROR" << std::endl;
+        std::cerr << "Error: " << e.what() << std::endl;
+        cleanupFilament(ctx);
         return EXIT_FAILURE;
     }
 }

@@ -1,33 +1,27 @@
-CXX = clang++-15
-CXXFLAGS = -g -O0 -std=gnu++17 -pthread \
-           -I/usr/include/filament-1.9 \
-           -I/usr/include/filament-1.9/backend \
-           -I/usr/include/stb \
-           -I/usr/include/utils \
-           -I/usr/include/camutils \
-           -I/usr/include/math \
-           -Wno-deprecated-declarations
+FILAMENT_LIBS = \
+    -lfilabridge -lfilaflat -lbackend \
+    -lbluegl -lbluevk -lfilament \
+    -lgltfio_core -lgltfio -luberzlib -lktxreader \
+    -lshaders -lgeometry -lutils -limage -luberarchive \
+    -lfilameshio -lmeshoptimizer -ldracodec \
+    -lzstd -lcivetweb -lvkshaders -lsmol-v \
+    -libl -lmatdbg -lm -lc++ -lc++abi -lstb
 
-LDFLAGS = -L/usr/lib/x86_64-linux-gnu \
-          -lfilament \
-          -lfilament_backend \
-          -lfilament_gltfio_core \
-          -lfilament_gltfio \
-          -lfilament_utils \
-          -lfilament_filabridge \
-          -lvulkan \
-          -lmeshoptimizer \
-          -lglfw \
-          -lassimp \
-          -ldraco \
-          -lspirv-cross-c-shared \
-          -ldl -lpthread
+CC = clang++-19
+
+CXXFLAGS = \
+	   -Iinclude/ \
+	    -I/usr/include/stb/ \
+	   -std=c++17 \
+	   -stdlib=libc++ -c -fno-builtin
+
+LDFLAGS = -Llib/x86_64/ -ldl
 
 gltf2png: gltf2png.o
-	$(CXX) gltf2png.o $(LDFLAGS) -o $@
+	$(CC) gltf2png.o -Wl,--start-group $(FILAMENT_LIBS) -Wl,--end-group $(LDFLAGS) -lpthread -o gltf2png
 
 gltf2png.o: gltf2png.cpp
-	$(CXX) $(CXXFLAGS) -c $<
+	$(CC) $(CXXFLAGS) gltf2png.cpp
 
 clean:
 	rm -f gltf2png gltf2png.o
